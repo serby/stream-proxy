@@ -5,15 +5,18 @@ var http = require('http')
   , async = require('async')
   , request = require('request')
   , streamProxy =  require('..')
-  // (
-  // { dest: 'http://localhost:8081'
-  // })
+  , destUrl = 'http://localhost:8081'
   ;
 
 function getProxy() {
-  var proxy = streamProxy();
-  proxy.listen(8080);
-  return proxy;
+
+  var httpProxy = http.createServer(function(req, res) {
+
+    streamProxy(destUrl, req, res).pipe(res);
+
+  }).listen(8080);
+
+  return httpProxy;
 }
 
 server.listen(8081);
@@ -26,7 +29,7 @@ describe('stream-proxy', function() {
 
       var proxy = getProxy();
 
-      request(serverUrl, function(error, info, data) {
+      request.post(serverUrl, function(error, info, data) {
         assert.equal(data, '<script src="/hi.js"></script>');
         assert.equal(info.headers.cached, 'miss');
         proxy.close();

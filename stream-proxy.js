@@ -5,64 +5,46 @@ var _ = require('lodash')
   , fs = require('fs')
   , join = require('path').join
   , LRU = require('lru-cache')
-  ;
+  , Stream = require('stream')
+  , responseStream = require('response-stream')
+  , es = require('event-stream')
 
-module.exports = function streamProxy (options) {
+module.exports = function streamProxy (destUrl, req, res) {
 
   var cache = LRU(100)
-    ;
-  return http.createServer(function(req, res) {
+    , requestDetails = url.parse(destUrl)
+    , proxyStream = new Stream()
 
-    var requestDetails = url.parse(destUrl)
-      ;
+  // Set the originating URL on the destination
+  requestDetails.path = req.url
 
-    requestDetails.path = req.url;
+  proxyStream.readable = true
 
-    var cacheData = cache.get(req.url);
+  var proxy = http.request(requestDetails, function(proxyResponse) {
 
-    if (cacheData) {
-      res.writeHead(200, cacheData.headers);
-      res.end(cacheData.data);
-      return false;
-    }
+    var data =
+      { data: ''
+      }
+      , shouldCache = proxyResponse.headers.expires
 
-    var proxy = http.request(requestDetails, function(proxyResponse) {
+    proxyResponse.on('data', function(chunk) {
+      proxyStream.emit('data', chunk)
+    })
 
-      var data =
-        { data: ''
-        }
-        , shouldCache = proxyResponse.headers.expires
-        ;
+    proxyResponse.on('end', function() {
+      proxyStream.emit('end')
+    })
 
+    res.writeHead(proxyResponse.statusCode, _.extend({ cached: 'miss' }, proxyResponse.headers))
+  })
 
-      proxyResponse.on('data', function(chunk) {
-        res.write(chunk, 'binary');
-        if (shouldCache) {
-          data.data += chunk;
-        }
-      });
+  req.on('data', function(chunk) {
+    proxy.write(chunk, 'binary')
+  })
 
-      proxyResponse.on('end', function() {
+  req.on('end', function() {
+    proxy.end()
+  })
 
-        // only cache if we need to
-        if (data.data) {
-          cache.set(req.url, data);
-        }
-
-        res.end();
-      });
-
-      data.headers = _.extend({ cached: 'hit' }, proxyResponse.headers);
-      res.writeHead(proxyResponse.statusCode, _.extend({ cached: 'miss' }, proxyResponse.headers));
-    });
-
-    req.on('data', function(chunk) {
-      proxy.write(chunk, 'binary');
-    });
-
-    req.on('end', function() {
-      proxy.end();
-    });
-
-  });
-};
+  return proxyStream
+}
