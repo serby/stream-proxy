@@ -1,50 +1,58 @@
 var _ = require('lodash')
   , http = require('http')
   , url = require('url')
-  , destUrl = 'http://localhost:8081'
-  , fs = require('fs')
-  , join = require('path').join
   , LRU = require('lru-cache')
   , Stream = require('stream')
-  , responseStream = require('response-stream')
-  , es = require('event-stream')
 
-module.exports = function streamProxy (destUrl, req, res) {
+module.exports = function streamProxy(destUrl) {
 
-  var cache = LRU(100)
-    , requestDetails = url.parse(destUrl)
+  var requestDetails = url.parse(destUrl)
     , proxyStream = new Stream()
-
-  // Set the originating URL on the destination
-  requestDetails.path = req.url
+    , dest
+    , src
 
   proxyStream.readable = true
+  proxyStream.writable = true
 
-  var proxy = http.request(requestDetails, function(proxyResponse) {
+  function proxyRequest() {
+    // Set the originating URL on the destination
+    requestDetails.path = src.url
+    var proxy = http.request(requestDetails, function(proxyResponse) {
 
-    var data =
-      { data: ''
-      }
-      , shouldCache = proxyResponse.headers.expires
+      //shouldCache = proxyResponse.headers.expires
+      proxyResponse.on('data', function(data) {
+        proxyStream.emit('data', data)
+        dest.emit('data', data)
+      })
 
-    proxyResponse.on('data', function(chunk) {
-      proxyStream.emit('data', chunk)
+      proxyResponse.on('end', function(data) {
+        proxyStream.emit('end', data)
+        dest.emit('end', data)
+        dest.end()
+      })
+
+      dest.writeHead(proxyResponse.statusCode, _.extend({ cached: 'miss' }, proxyResponse.headers))
     })
 
-    proxyResponse.on('end', function() {
-      proxyStream.emit('end')
-    })
+    proxyStream.write = function write(data) {
+      proxy.write(data, 'binary')
+    }
 
-    res.writeHead(proxyResponse.statusCode, _.extend({ cached: 'miss' }, proxyResponse.headers))
+    proxyStream.end = function end(data) {
+      proxy.end(data)
+    }
+
+  }
+
+  proxyStream.on('pipe', function(pipeSrc) {
+    src = pipeSrc
+    proxyRequest()
   })
 
-  req.on('data', function(chunk) {
-    proxy.write(chunk, 'binary')
-  })
-
-  req.on('end', function() {
-    proxy.end()
-  })
+  proxyStream.pipe = function(streamDest, options) {
+    dest = streamDest
+    Stream.prototype.pipe.call(proxyStream, dest, options)
+  }
 
   return proxyStream
 }

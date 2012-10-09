@@ -6,74 +6,111 @@ var http = require('http')
   , request = require('request')
   , streamProxy =  require('..')
   , destUrl = 'http://localhost:8081'
-  ;
+
 
 function getProxy() {
 
   var httpProxy = http.createServer(function(req, res) {
+    // var balance = loadBalancer(
+    //   [
+    //     { dest: 'http://localhost:8081'
+    //     , weight: 0.75
+    //     }
+    //   , { dest: 'http://localhost:8082'
+    //     }
+    //   ])
 
-    streamProxy(destUrl, req, res).pipe(res);
+    var debugStream = {
+      write: function(d) {
+        console.log('WRITE', d)
+      },
+      end: function(d) {
+        console.log('END', d)
+      },
+      on: function(a, b) {
+        console.log('ON', a, b)
+      },
+      emit: function(e,d) {
+        console.log('EMIT',e,d)}
+      };
 
-  }).listen(8080);
+    req.pipe(streamProxy(destUrl)).pipe(res)
 
-  return httpProxy;
+  }).listen(8080)
+
+  return httpProxy
 }
 
-server.listen(8081);
+
+server.listen(8081)
 
 describe('stream-proxy', function() {
+
+  describe('downstream web server fixture', function() {
+
+    it('should respond', function(done) {
+      streamProxy(destUrl)
+      request(destUrl, function(error, info, data) {
+        assert.equal(data, '<script src="/hi.js"></script>')
+        done()
+      })
+    })
+
+  })
 
   describe('first request', function() {
 
     it('should miss cache /', function(done) {
 
-      var proxy = getProxy();
+      var proxy = getProxy()
 
-      request.post(serverUrl, function(error, info, data) {
-        assert.equal(data, '<script src="/hi.js"></script>');
-        assert.equal(info.headers.cached, 'miss');
-        proxy.close();
-        done();
-      });
+      request(serverUrl, function(error, info, data) {
+        assert.equal(data, '<script src="/hi.js"></script>')
+        assert.equal(info.headers.cached, 'miss')
 
-    });
+        proxy.close()
+
+        done()
+      })
+
+    })
 
     it('should miss cache /hi.js', function(done) {
-      var proxy = getProxy();
+      var proxy = getProxy()
       request(serverUrl + 'hi.js', function(error, info, data) {
-        assert.equal(data, 'alert("hi");');
-        assert.equal(info.headers.cached, 'miss');
-        proxy.close();
-        done();
-      });
+        assert.equal(data, 'alert("hi")')
+        assert.equal(info.headers.cached, 'miss')
+        proxy.close()
+        done()
+      })
 
-    });
+    })
 
-  });
+  })
 
   describe('second request', function() {
 
     it('with no expires should never hit cache /', function(done) {
-      var proxy = getProxy();
+      var proxy = getProxy()
       async.series([
           function(callback) {
             request(serverUrl, function(error, info, data) {
-              assert.equal(data, '<script src="/hi.js"></script>');
-              assert.equal(info.headers.cached, 'miss');
-              callback();
-            });
+              assert.equal(data, '<script src="/hi.js"></script>')
+              assert.equal(info.headers.cached, 'miss')
+              callback()
+            })
           },
           function(callback) {
             request(serverUrl, function(error, info, data) {
-              assert.equal(data, '<script src="/hi.js"></script>');
-              assert.equal(info.headers.cached, 'miss');
-              proxy.close();
-              done();
-              callback();
-            });
+              assert.equal(data, '<script src="/hi.js"></script>')
+              assert.equal(info.headers.cached, 'miss')
+              proxy.close()
+              done()
+              callback()
+            })
           },
-        ]);
-    });
-  });
+        ])
+    })
+  })
 
-});
+})
