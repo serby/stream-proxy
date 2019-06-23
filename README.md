@@ -1,6 +1,6 @@
 #
 
-[![build status](https://secure.travis-ci.org/serby/###.png)](http://travis-ci.org/serby/###)
+[![build status](https://secure.travis-ci.org/serby/###.png)](http://travis-ci.org/serby/###) [![Greenkeeper badge](https://badges.greenkeeper.io/serby/stream-proxy.svg)](https://greenkeeper.io/)
 
 ## Installation
 
